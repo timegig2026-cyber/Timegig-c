@@ -29,7 +29,7 @@ import {
 import SubscriptionFlow, { VerificationData } from './components/SubscriptionFlow';
 import NavigationPanels, { ActiveTab, SeekerListing, SeekerReview, SubmittedSubscription } from './components/NavigationPanels';
 import AuthScreen, { UserAccount } from './components/AuthScreen';
-import { supabase } from './lib/supabase';
+import { dataService } from './lib/dataService';
 
 export interface ActiveGig {
   id: string;
@@ -219,22 +219,13 @@ export default function App() {
 
     isFetchingRef.current = true;
     try {
-      const { data, error } = await supabase
-        .from('seekers')
-        .select('*')
-        .gte('originLat', sw.lat)
-        .lte('originLat', ne.lat)
-        .gte('originLng', sw.lng)
-        .lte('originLng', ne.lng)
-        .limit(100);
-
-      if (error) throw error;
+      const data = await dataService.fetchSeekers(sw.lat, ne.lat, sw.lng, ne.lng);
       if (data) {
-        setSeekersList(data as SeekerListing[]);
-        updateSeekerMarkers(data as SeekerListing[]);
+        setSeekersList(data);
+        updateSeekerMarkers(data);
       }
     } catch (err) {
-      console.error('Supabase fetch error:', err);
+      console.error('Fetch seekers error:', err);
     } finally {
       isFetchingRef.current = false;
     }

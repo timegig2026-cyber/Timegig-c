@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 import { VerificationData } from './SubscriptionFlow';
 import { UserAccount } from './AuthScreen';
-import { supabase } from '../lib/supabase';
+import { dataService } from '../lib/dataService';
 
 export type ActiveTab = 'tenant' | 'referrals' | 'gigs' | 'seekers' | 'profile' | null;
 
@@ -141,20 +141,11 @@ export default function NavigationPanels({
   // Real submitted subscriptions from Supabase
   const [submittedSubscriptions, setSubmittedSubscriptions] = useState<SubmittedSubscription[]>([]);
 
-  // Fetch subscriptions from Supabase
+  // Fetch subscriptions from dataService
   useEffect(() => {
     const fetchSubs = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('subscriptions')
-          .select('*')
-          .order('submittedAt', { ascending: false });
-        
-        if (error) throw error;
-        if (data) setSubmittedSubscriptions(data as SubmittedSubscription[]);
-      } catch (err) {
-        console.error('Supabase fetch subs error:', err);
-      }
+      const data = await dataService.fetchSubscriptions();
+      if (data) setSubmittedSubscriptions(data);
     };
     fetchSubs();
   }, []);
@@ -218,84 +209,60 @@ export default function NavigationPanels({
     }
   };
 
-  // When verificationData is submitted, sync to Supabase
+  // When verificationData is submitted, sync to dataService
   useEffect(() => {
     if (!verificationData?.submittedAt) return;
 
     const syncSub = async () => {
-      try {
-        const exists = submittedSubscriptions.some((sub) => sub.submittedAt === verificationData.submittedAt);
-        if (exists) return;
+      const exists = submittedSubscriptions.some((sub) => sub.submittedAt === verificationData.submittedAt);
+      if (exists) return;
 
-        const newSub: SubmittedSubscription = {
-          id: `sub-tg-${Date.now()}`,
-          subscriberName: currentUser?.name || 'Verified Applicant',
-          subscriberEmail: currentUser?.email || 'timegig2026@gmail.com',
-          plan: verificationData.subscription,
-          amountRands: verificationData.subscription === 'tenant' ? 3400.0 : 1450.0,
-          submittedAt: verificationData.submittedAt,
-          status: 'pending',
-          idDocumentName: verificationData.idDocumentName || 'rsa-national-id.pdf',
-          paymentDocumentName: verificationData.paymentDocumentName || 'eft-proof-of-payment.png',
-          selfieImage: verificationData.selfieImage || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop',
-        };
+      const newSub: SubmittedSubscription = {
+        id: `sub-tg-${Date.now()}`,
+        subscriberName: currentUser?.name || 'Verified Applicant',
+        subscriberEmail: currentUser?.email || 'timegig2026@gmail.com',
+        plan: verificationData.subscription,
+        amountRands: verificationData.subscription === 'tenant' ? 3400.0 : 1450.0,
+        submittedAt: verificationData.submittedAt,
+        status: 'pending',
+        idDocumentName: verificationData.idDocumentName || 'rsa-national-id.pdf',
+        paymentDocumentName: verificationData.paymentDocumentName || 'eft-proof-of-payment.png',
+        selfieImage: verificationData.selfieImage || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop',
+      };
 
-        const { error } = await supabase.from('subscriptions').insert([newSub]);
-        if (error) throw error;
-
-        setSubmittedSubscriptions((prev) => [newSub, ...prev]);
-      } catch (err) {
-        console.error('Supabase sync error:', err);
-      }
+      await dataService.saveSubscription(newSub);
+      setSubmittedSubscriptions((prev) => [newSub, ...prev]);
     };
     syncSub();
   }, [verificationData, currentUser, submittedSubscriptions]);
 
   const handleApproveSubmission = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('subscriptions')
-        .update({ status: 'approved' })
-        .eq('id', id);
+    await dataService.updateSubscriptionStatus(id, 'approved');
 
-      if (error) throw error;
+    setSubmittedSubscriptions((prev) =>
+      prev.map((sub) => (sub.id === id ? { ...sub, status: 'approved' } : sub))
+    );
 
-      setSubmittedSubscriptions((prev) =>
-        prev.map((sub) => (sub.id === id ? { ...sub, status: 'approved' } : sub))
-      );
-
-      if (selectedSubmissionToView?.id === id) {
-        setSelectedSubmissionToView((prev) => (prev ? { ...prev, status: 'approved' } : null));
-      }
-
-      setContactSuccessToast('Referral approved!');
-      setTimeout(() => {
-        setSelectedSubmissionToView(null);
-        onNavigateToTab('profile');
-      }, 1200);
-    } catch (err) {
-      console.error('Approval error:', err);
+    if (selectedSubmissionToView?.id === id) {
+      setSelectedSubmissionToView((prev) => (prev ? { ...prev, status: 'approved' } : null));
     }
+
+    setContactSuccessToast('Referral approved!');
+    setTimeout(() => {
+      setSelectedSubmissionToView(null);
+      onNavigateToTab('profile');
+    }, 1200);
   };
 
   const handleRejectSubmission = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('subscriptions')
-        .update({ status: 'rejected' })
-        .eq('id', id);
+    await dataService.updateSubscriptionStatus(id, 'rejected');
 
-      if (error) throw error;
+    setSubmittedSubscriptions((prev) =>
+      prev.map((sub) => (sub.id === id ? { ...sub, status: 'rejected' } : sub))
+    );
 
-      setSubmittedSubscriptions((prev) =>
-        prev.map((sub) => (sub.id === id ? { ...sub, status: 'rejected' } : sub))
-      );
-
-      if (selectedSubmissionToView?.id === id) {
-        setSelectedSubmissionToView((prev) => (prev ? { ...prev, status: 'rejected' } : null));
-      }
-    } catch (err) {
-      console.error('Rejection error:', err);
+    if (selectedSubmissionToView?.id === id) {
+      setSelectedSubmissionToView((prev) => (prev ? { ...prev, status: 'rejected' } : null));
     }
   };
 
