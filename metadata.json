@@ -1,0 +1,6 @@
+{
+  "name": "World Map & User Location",
+  "description": "Interactive OpenStreetMap world map template displaying real-time user location with zero API costs.",
+  "requestFramePermissions": ["geolocation", "camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

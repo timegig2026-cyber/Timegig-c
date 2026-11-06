@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.leaflet-container {
+  width: 100%;
+  height: 100%;
+  background-color: #aad3df;
+}
+
+/* Ensure smooth leaflet animations and completely hidden attribution */
+.custom-location-marker,
+.custom-search-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+.leaflet-control-attribution {
+  display: none !important;
+}
+
+/* Custom leaflet popup overrides for clean styling */
+.leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  padding: 4px;
+}
+
+.leaflet-popup-tip {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+}
