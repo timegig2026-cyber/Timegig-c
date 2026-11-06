@@ -666,9 +666,9 @@ export default function App() {
   const isBlurredWallpaper = activeMenuTab !== 'gigs';
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-slate-100 select-none font-sans flex flex-col">
+    <div className="relative w-full h-[100dvh] overflow-hidden bg-slate-100 select-none font-sans flex flex-col">
       {/* Map Container Area: Bright natural OpenStreetMap view */}
-      <div className="relative flex-1 w-full h-full overflow-hidden bg-[#aad3df]">
+      <div className="relative flex-1 w-full overflow-hidden bg-[#aad3df]">
         <div
           ref={mapContainerRef}
           className={`w-full h-full z-0 transition-[filter,transform] duration-300 ease-out ${
@@ -906,24 +906,24 @@ export default function App() {
             </div>
           </div>
         )}
-      </div>
 
-      {/* Screen Views for Tenant, Referrals, Seekers, Profile */}
-      <NavigationPanels
-        activeTab={activeMenuTab}
-        onClose={() => setActiveMenuTab('gigs')} // Close returns to full map
-        verificationData={verificationData}
-        onOpenSubscriptionModal={() => {
-          setActiveMenuTab('gigs');
-          setShowSubscription(true);
-        }}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-        onNavigateToTab={(tab) => setActiveMenuTab(tab)}
-        onHireSeeker={handleHireSeeker}
-        seekersList={seekersList}
-        onUpdateSeekersList={setSeekersList}
-      />
+        {/* Screen Views for Tenant, Referrals, Seekers, Profile */}
+        <NavigationPanels
+          activeTab={activeMenuTab}
+          onClose={() => setActiveMenuTab('gigs')} // Close returns to full map
+          verificationData={verificationData}
+          onOpenSubscriptionModal={() => {
+            setActiveMenuTab('gigs');
+            setShowSubscription(true);
+          }}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          onNavigateToTab={(tab) => setActiveMenuTab(tab)}
+          onHireSeeker={handleHireSeeker}
+          seekersList={seekersList}
+          onUpdateSeekersList={setSeekersList}
+        />
+      </div>
 
       {/* Gig Owner Rating & Completion Modal */}
       {showRatingModal && activeGig && (
@@ -1002,8 +1002,8 @@ export default function App() {
         </div>
       )}
 
-      {/* White Bottom Menu Bar (Always Visible) */}
-      <footer className="w-full h-14 bg-white border-t border-slate-200 shadow-xl z-40 shrink-0 flex items-center">
+      {/* White Bottom Menu Bar (Always Visible) - Adjusted for perfect fit with safe-area insets */}
+      <footer className="w-full h-14 bg-white border-t border-slate-200 shadow-xl z-40 shrink-0 flex items-center pb-[env(safe-area-inset-bottom)]">
         <div className="w-full max-w-lg mx-auto px-2 flex items-center justify-between">
           {/* 1. Tenant Feature */}
           <button

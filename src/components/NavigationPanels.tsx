@@ -342,7 +342,7 @@ export default function NavigationPanels({
     <>
       {/* 1. TENANT FEATURE: DASHBOARD LOOK */}
       {activeTab === 'tenant' && (
-        <div className="absolute inset-x-0 top-0 bottom-14 z-30 pointer-events-none flex flex-col">
+        <div className="absolute inset-x-0 top-0 bottom-0 z-30 pointer-events-none flex flex-col">
           <div className="flex-1 w-full max-w-md mx-auto pt-6 pb-4 px-3 overflow-y-auto space-y-3 pointer-events-auto">
             {/* Dashboard Title */}
             <div className="px-1 flex items-center justify-between">
@@ -418,7 +418,7 @@ export default function NavigationPanels({
 
       {/* 2. REFERRALS FEATURE: STICKY SEARCH BAR */}
       {activeTab === 'referrals' && (
-        <div className="absolute inset-x-0 top-0 bottom-14 z-30 pointer-events-none flex flex-col">
+        <div className="absolute inset-x-0 top-0 bottom-0 z-30 pointer-events-none flex flex-col">
           <div className="flex-1 w-full max-w-md mx-auto pt-6 pb-4 px-3 flex flex-col pointer-events-auto overflow-hidden">
             <div className="mb-3 shrink-0">
               <div className="relative flex items-center bg-white/95 backdrop-blur-md rounded-2xl shadow-md border border-slate-200/90 px-3 py-2">
@@ -485,7 +485,7 @@ export default function NavigationPanels({
 
       {/* 3. SEEKERS FEATURE: STICKY SEARCH BAR */}
       {activeTab === 'seekers' && (
-        <div className="absolute inset-x-0 top-0 bottom-14 z-30 pointer-events-none flex flex-col">
+        <div className="absolute inset-x-0 top-0 bottom-0 z-30 pointer-events-none flex flex-col">
           <div className="flex-1 w-full max-w-md mx-auto pt-6 pb-4 px-3 flex flex-col pointer-events-auto overflow-hidden">
             <div className="mb-3 shrink-0">
               <div className="relative flex items-center bg-white/95 backdrop-blur-md rounded-2xl shadow-md border border-slate-200/90 px-3 py-2">
@@ -531,7 +531,7 @@ export default function NavigationPanels({
 
       {/* 4. PROFILE FEATURE */}
       {activeTab === 'profile' && (
-        <div className="absolute inset-x-0 top-0 bottom-14 z-30 pointer-events-none flex flex-col">
+        <div className="absolute inset-x-0 top-0 bottom-0 z-30 pointer-events-none flex flex-col">
           <div className="flex-1 w-full max-w-md mx-auto pt-6 pb-4 px-3 overflow-y-auto space-y-3 pointer-events-auto">
             <form onSubmit={handleSaveProfile} className="w-full bg-white/95 backdrop-blur-md rounded-2xl p-4 shadow-md border border-slate-200/90 space-y-4">
               <div className="flex items-center gap-4">
