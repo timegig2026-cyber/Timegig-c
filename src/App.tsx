@@ -29,6 +29,7 @@ import {
 import SubscriptionFlow, { VerificationData } from './components/SubscriptionFlow';
 import NavigationPanels, { ActiveTab, SeekerListing, SeekerReview, SubmittedSubscription } from './components/NavigationPanels';
 import AuthScreen, { UserAccount } from './components/AuthScreen';
+import { supabase } from './lib/supabase';
 
 export interface ActiveGig {
   id: string;
@@ -86,20 +87,18 @@ export default function App() {
   const userCircleRef = useRef<L.Circle | null>(null);
   const searchMarkerRef = useRef<L.Marker | null>(null);
   const watchIdRef = useRef<number | null>(null);
+  
+  // Seekers Markers Ref to avoid re-rendering
+  const seekerMarkersRef = useRef<{ [key: string]: L.Marker }>({});
+  const isFetchingRef = useRef<boolean>(false);
 
   // Active Gig Navigation Route Refs
   const routePolylineRef = useRef<L.Polyline | null>(null);
   const gigOriginMarkerRef = useRef<L.Marker | null>(null);
   const gigDestMarkerRef = useRef<L.Marker | null>(null);
 
-  // Seekers List State (No demo or mock data users)
-  const [seekersList, setSeekersList] = useState<SeekerListing[]>(() => {
-    try {
-      const stored = localStorage.getItem('worldmap_seekers_list');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return [];
-  });
+  // Seekers List State
+  const [seekersList, setSeekersList] = useState<SeekerListing[]>([]);
 
   // Active Gig Navigation State
   const [activeGig, setActiveGig] = useState<ActiveGig | null>(null);
@@ -112,20 +111,12 @@ export default function App() {
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [isSatellite, setIsSatellite] = useState<boolean>(false);
 
-  // Bottom Menu Bar Active Tab: 'tenant' | 'referrals' | 'gigs' | 'seekers' | 'profile' | null
+  // Bottom Menu Bar Active Tab
   const [activeMenuTab, setActiveMenuTab] = useState<ActiveTab>('gigs');
 
   // Subscription Modal State
   const [showSubscription, setShowSubscription] = useState<boolean>(false);
-  const [verificationData, setVerificationData] = useState<VerificationData | null>({
-    subscription: 'tenant',
-    selfieImage: null,
-    idDocumentName: 'rsa-national-id.pdf',
-    idDocumentUrl: '#',
-    paymentDocumentName: 'eft-proof-of-payment.png',
-    paymentDocumentUrl: '#',
-    submittedAt: Date.now() - 360000,
-  });
+  const [verificationData, setVerificationData] = useState<VerificationData | null>(null);
 
   // Search States
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -143,7 +134,7 @@ export default function App() {
     }, 2800);
   }, []);
 
-  // Handle Seeker Hired: Sets Active Gig & Directs to Live Map Navigation
+  // Handle Seeker Hired
   const handleHireSeeker = (seeker: SeekerListing) => {
     const destLat = location ? location.lat : -26.1076;
     const destLng = location ? location.lng : 28.0567;
@@ -167,63 +158,137 @@ export default function App() {
     showToast(`Navigating ${seeker.name} to gig destination!`, 'success');
   };
 
-  // Gig Owner Completes Gig & Submits Rating to Seeker Profile
-  const handleCompleteGigAndRate = () => {
+  // Gig Owner Completes Gig
+  const handleCompleteGigAndRate = async () => {
     if (!activeGig) return;
 
-    setSeekersList((prev) => {
-      const updated = prev.map((sk) => {
-        if (sk.id === activeGig.seekerId) {
-          const newReview: SeekerReview = {
-            id: `rev-${Date.now()}`,
-            reviewerName: `${currentUser?.name || 'TimeGiG'} (Gig Owner)`,
-            rating: gigOwnerRating,
-            comment: gigOwnerComment.trim() || 'Gig successfully completed on time!',
-            date: 'Just now',
-          };
-          const newReviews = [newReview, ...sk.reviews];
-          const totalRating = newReviews.reduce((sum, r) => sum + r.rating, 0);
-          const avgRating = totalRating / newReviews.length;
-          return {
-            ...sk,
-            rating: parseFloat(avgRating.toFixed(1)),
-            reviewCount: newReviews.length,
-            reviews: newReviews,
-          };
-        }
-        return sk;
+    try {
+      // Logic to update seeker in Supabase would go here
+      // For now, update local state to reflect change immediately
+      setSeekersList((prev) => {
+        return prev.map((sk) => {
+          if (sk.id === activeGig.seekerId) {
+            const newReview: SeekerReview = {
+              id: `rev-${Date.now()}`,
+              reviewerName: `${currentUser?.name || 'TimeGiG'} (Gig Owner)`,
+              rating: gigOwnerRating,
+              comment: gigOwnerComment.trim() || 'Gig successfully completed on time!',
+              date: 'Just now',
+            };
+            const newReviews = [newReview, ...sk.reviews];
+            const totalRating = newReviews.reduce((sum, r) => sum + r.rating, 0);
+            const avgRating = totalRating / newReviews.length;
+            return {
+              ...sk,
+              rating: parseFloat(avgRating.toFixed(1)),
+              reviewCount: newReviews.length,
+              reviews: newReviews,
+            };
+          }
+          return sk;
+        });
       });
-      localStorage.setItem('worldmap_seekers_list', JSON.stringify(updated));
-      return updated;
-    });
 
-    const map = mapInstanceRef.current;
-    if (map) {
-      if (routePolylineRef.current) map.removeLayer(routePolylineRef.current);
-      if (gigOriginMarkerRef.current) map.removeLayer(gigOriginMarkerRef.current);
-      if (gigDestMarkerRef.current) map.removeLayer(gigDestMarkerRef.current);
-      routePolylineRef.current = null;
-      gigOriginMarkerRef.current = null;
-      gigDestMarkerRef.current = null;
+      const map = mapInstanceRef.current;
+      if (map) {
+        if (routePolylineRef.current) map.removeLayer(routePolylineRef.current);
+        if (gigOriginMarkerRef.current) map.removeLayer(gigOriginMarkerRef.current);
+        if (gigDestMarkerRef.current) map.removeLayer(gigDestMarkerRef.current);
+        routePolylineRef.current = null;
+        gigOriginMarkerRef.current = null;
+        gigDestMarkerRef.current = null;
+      }
+
+      const completedSeekerName = activeGig.seekerName;
+      setActiveGig(null);
+      setShowRatingModal(false);
+      showToast(`Gig completed! Rated ${gigOwnerRating}.0 ⭐`, 'success');
+    } catch (err) {
+      console.error('Error completing gig:', err);
     }
-
-    const completedSeekerName = activeGig.seekerName;
-    setActiveGig(null);
-    setShowRatingModal(false);
-    showToast(`Gig completed! Rated ${gigOwnerRating}.0 ⭐ - Added to ${completedSeekerName}'s profile.`, 'success');
   };
 
-  // Initialize the Leaflet map once user is logged in
+  // Fetch Seekers from Supabase based on map bounds
+  const fetchSeekersInView = useCallback(async () => {
+    const map = mapInstanceRef.current;
+    if (!map || isFetchingRef.current) return;
+
+    const bounds = map.getBounds();
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
+
+    isFetchingRef.current = true;
+    try {
+      const { data, error } = await supabase
+        .from('seekers')
+        .select('*')
+        .gte('originLat', sw.lat)
+        .lte('originLat', ne.lat)
+        .gte('originLng', sw.lng)
+        .lte('originLng', ne.lng)
+        .limit(100);
+
+      if (error) throw error;
+      if (data) {
+        setSeekersList(data as SeekerListing[]);
+        updateSeekerMarkers(data as SeekerListing[]);
+      }
+    } catch (err) {
+      console.error('Supabase fetch error:', err);
+    } finally {
+      isFetchingRef.current = false;
+    }
+  }, []);
+
+  const updateSeekerMarkers = (seekers: SeekerListing[]) => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    // Remove markers that are no longer in the list
+    const currentIds = new Set(seekers.map(s => s.id));
+    Object.keys(seekerMarkersRef.current).forEach(id => {
+      if (!currentIds.has(id)) {
+        map.removeLayer(seekerMarkersRef.current[id]);
+        delete seekerMarkersRef.current[id];
+      }
+    });
+
+    // Add or update markers
+    seekers.forEach(seeker => {
+      if (!seekerMarkersRef.current[seeker.id]) {
+        const marker = L.marker([seeker.originLat, seeker.originLng], {
+          icon: L.divIcon({
+            className: 'seeker-marker',
+            html: `<div class="w-8 h-8 rounded-full border-2 border-white shadow-lg bg-blue-500 overflow-hidden">
+                    <img src="${seeker.avatarUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop'}" class="w-full h-full object-cover" />
+                   </div>`,
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+          })
+        }).addTo(map);
+
+        marker.bindPopup(`
+          <div class="p-2 min-w-[150px]">
+            <div class="font-bold text-slate-900">${seeker.name}</div>
+            <div class="text-[10px] text-slate-500 mb-1">${seeker.role}</div>
+            <div class="text-xs font-bold text-emerald-600">${seeker.budgetRands}</div>
+          </div>
+        `);
+        
+        seekerMarkersRef.current[seeker.id] = marker;
+      }
+    });
+  };
+
+  // Initialize the Leaflet map
   useEffect(() => {
     if (!currentUser || !mapContainerRef.current || mapInstanceRef.current) return;
 
-    // Create Leaflet Map with natural bright OpenStreetMap colors - Optimized for Speed
     const map = L.map(mapContainerRef.current, {
-      center: [-28.4793, 24.6727], // Centered over South Africa by default
-      zoom: 5,
+      center: [-28.4793, 24.6727], // South Africa
+      zoom: 6,
       minZoom: 2,
-      maxZoom: 19,
-      worldCopyJump: true,
+      maxZoom: 18,
       zoomControl: false,
       attributionControl: false,
       preferCanvas: true,
@@ -231,48 +296,38 @@ export default function App() {
       fadeAnimation: true,
       zoomAnimation: true,
       inertia: true,
-      bounceAtZoomLimits: false,
     });
 
     const streetTileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '',
-      keepBuffer: 4, // Keep more tiles around for smoother panning
+      keepBuffer: 4,
       updateWhenIdle: true,
-      crossOrigin: true,
+    }).addTo(map);
+
+    const satelliteTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      keepBuffer: 4,
+      updateWhenIdle: true,
     });
-
-    const satelliteTileLayer = L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      {
-        maxZoom: 19,
-        attribution: '',
-        keepBuffer: 4,
-        updateWhenIdle: true,
-        crossOrigin: true,
-      }
-    );
-
-    streetTileLayer.addTo(map);
 
     streetLayerRef.current = streetTileLayer;
     satelliteLayerRef.current = satelliteTileLayer;
     mapInstanceRef.current = map;
 
-    // Proactive resize check
-    const timer = setTimeout(() => {
-      map.invalidateSize({ animate: false });
-    }, 100);
+    // Listen for map movements to fetch markers
+    map.on('moveend', fetchSeekersInView);
+    map.on('zoomend', fetchSeekersInView);
+
+    // Initial fetch
+    fetchSeekersInView();
+
+    setTimeout(() => map.invalidateSize(), 100);
 
     return () => {
-      clearTimeout(timer);
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-      }
       map.remove();
       mapInstanceRef.current = null;
     };
-  }, [currentUser]);
+  }, [currentUser, fetchSeekersInView]);
 
   // Handle Satellite View Toggle
   const toggleSatelliteView = () => {
@@ -292,7 +347,7 @@ export default function App() {
     }
   };
 
-  // Update or create the user location marker & accuracy circle on the map
+  // Update or create the user location marker
   const updateMapMarker = useCallback((lat: number, lng: number, accuracy: number, shouldFlyTo: boolean) => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -315,110 +370,65 @@ export default function App() {
     if (userMarkerRef.current) {
       userMarkerRef.current.setLatLng([lat, lng]);
     } else {
-      const marker = L.marker([lat, lng], { icon: pulseIcon }).addTo(map);
-      marker.bindPopup(`
-        <div style="font-family: system-ui, sans-serif; font-size: 13px; color: #1e293b; padding: 2px;">
-          <div style="font-weight: 700; color: #0f172a; margin-bottom: 3px;">📍 You are here</div>
-          <div>Lat: ${lat.toFixed(5)}°</div>
-          <div>Lng: ${lng.toFixed(5)}°</div>
-          <div style="color: #64748b; font-size: 11px; margin-top: 2px;">Accuracy: &plusmn;${Math.round(accuracy)}m</div>
-        </div>
-      `);
-      userMarkerRef.current = marker;
+      userMarkerRef.current = L.marker([lat, lng], { icon: pulseIcon }).addTo(map);
     }
 
     if (userCircleRef.current) {
       userCircleRef.current.setLatLng([lat, lng]);
       userCircleRef.current.setRadius(accuracy);
     } else {
-      const circle = L.circle([lat, lng], {
+      userCircleRef.current = L.circle([lat, lng], {
         radius: accuracy,
         color: '#2563eb',
         fillColor: '#3b82f6',
-        fillOpacity: 0.12,
-        weight: 1.5,
-        dashArray: '4, 4',
+        fillOpacity: 0.1,
+        weight: 1,
       }).addTo(map);
-      userCircleRef.current = circle;
     }
 
     if (shouldFlyTo) {
-      const targetZoom = accuracy < 100 ? 16 : accuracy < 1000 ? 14 : 11;
-      map.flyTo([lat, lng], Math.max(map.getZoom(), targetZoom), {
-        duration: 1.5,
-        easeLinearity: 0.25,
-      });
+      map.flyTo([lat, lng], 15, { duration: 1.5 });
     }
   }, []);
 
   // Request user location
   const locateUser = useCallback((flyTo: boolean = true) => {
-    if (!navigator.geolocation) {
-      showToast('Geolocation is not supported by your browser', 'error');
-      return;
-    }
-
+    if (!navigator.geolocation) return;
     setIsLocating(true);
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setIsLocating(false);
         const { latitude, longitude, accuracy } = position.coords;
-        const newLocation: UserLocation = {
-          lat: latitude,
-          lng: longitude,
-          accuracy,
-          timestamp: position.timestamp,
-        };
-        setLocation(newLocation);
+        setLocation({ lat: latitude, lng: longitude, accuracy, timestamp: position.timestamp });
         updateMapMarker(latitude, longitude, accuracy, flyTo);
-        showToast('Located your position', 'success');
       },
-      () => {
-        setIsLocating(false);
-        showToast('Unable to access location. Check browser permissions.', 'error');
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 6000, // Reduced timeout for faster fallback
-        maximumAge: 15000, // Allow slightly older cached positions for speed
-      }
+      () => setIsLocating(false),
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 10000 }
     );
-  }, [updateMapMarker, showToast]);
+  }, [updateMapMarker]);
 
-  // Initial location fetch
+  // Background location tracking
   useEffect(() => {
     if (!currentUser) return;
-    locateUser(true);
+    
+    // Get initial location in background (no flyTo)
+    locateUser(false);
 
     if (navigator.geolocation) {
-      const watchId = navigator.geolocation.watchPosition(
+      watchIdRef.current = navigator.geolocation.watchPosition(
         (position) => {
           const { latitude, longitude, accuracy } = position.coords;
-          const newLoc: UserLocation = {
-            lat: latitude,
-            lng: longitude,
-            accuracy,
-            timestamp: position.timestamp,
-          };
-          setLocation(newLoc);
+          setLocation({ lat: latitude, lng: longitude, accuracy, timestamp: position.timestamp });
           updateMapMarker(latitude, longitude, accuracy, false);
         },
         () => {},
-        {
-          enableHighAccuracy: true,
-          maximumAge: 10000,
-          timeout: 15000,
-        }
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
       );
-      watchIdRef.current = watchId;
     }
 
     return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
-        watchIdRef.current = null;
-      }
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
     };
   }, [currentUser, locateUser, updateMapMarker]);
 
@@ -1008,43 +1018,27 @@ export default function App() {
           {/* 1. Tenant Feature */}
           <button
             onClick={() => handleTabClick('tenant')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all ${
-              activeMenuTab === 'tenant'
-                ? 'text-blue-600 font-bold'
-                : 'text-black hover:text-slate-900'
+            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all text-black ${
+              activeMenuTab === 'tenant' ? 'font-bold' : ''
             }`}
           >
-            <div
-              className={`p-1.5 transition-all ${
-                activeMenuTab === 'tenant'
-                  ? 'text-blue-600 font-bold'
-                  : 'text-black'
-              }`}
-            >
-              <Building2 className="w-5 h-5 text-black" />
+            <div className="p-1.5 transition-all text-black">
+              <Building2 className="w-5 h-5" />
             </div>
-            <span className="text-[11px] mt-0.5 tracking-tight text-black">Tenant</span>
+            <span className="text-[11px] mt-0.5 tracking-tight">Tenant</span>
           </button>
 
           {/* 2. Referrals Feature */}
           <button
             onClick={() => handleTabClick('referrals')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all ${
-              activeMenuTab === 'referrals'
-                ? 'text-blue-600 font-bold'
-                : 'text-black hover:text-slate-900'
+            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all text-black ${
+              activeMenuTab === 'referrals' ? 'font-bold' : ''
             }`}
           >
-            <div
-              className={`p-1.5 transition-all ${
-                activeMenuTab === 'referrals'
-                  ? 'text-blue-600 font-bold'
-                  : 'text-black'
-              }`}
-            >
-              <Users className="w-5 h-5 text-black" />
+            <div className="p-1.5 transition-all text-black">
+              <Users className="w-5 h-5" />
             </div>
-            <span className="text-[11px] mt-0.5 tracking-tight text-black">Referrals</span>
+            <span className="text-[11px] mt-0.5 tracking-tight">Referrals</span>
           </button>
 
           {/* 3. GiGs Feature (Bigger Flame Icon Feature) */}
@@ -1077,43 +1071,27 @@ export default function App() {
           {/* 4. Seekers Feature (Shows only map in blur) */}
           <button
             onClick={() => handleTabClick('seekers')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all ${
-              activeMenuTab === 'seekers'
-                ? 'text-blue-600 font-bold'
-                : 'text-black hover:text-slate-900'
+            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all text-black ${
+              activeMenuTab === 'seekers' ? 'font-bold' : ''
             }`}
           >
-            <div
-              className={`p-1.5 transition-all ${
-                activeMenuTab === 'seekers'
-                  ? 'text-blue-600 font-bold'
-                  : 'text-black'
-              }`}
-            >
-              <UserSearch className="w-5 h-5 text-black" />
+            <div className="p-1.5 transition-all text-black">
+              <UserSearch className="w-5 h-5" />
             </div>
-            <span className="text-[11px] mt-0.5 tracking-tight text-black">Seekers</span>
+            <span className="text-[11px] mt-0.5 tracking-tight">Seekers</span>
           </button>
 
           {/* 5. Profile Feature (Shows only map in blur) */}
           <button
             onClick={() => handleTabClick('profile')}
-            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all ${
-              activeMenuTab === 'profile'
-                ? 'text-blue-600 font-bold'
-                : 'text-black hover:text-slate-900'
+            className={`flex-1 flex flex-col items-center justify-center py-1 rounded-xl transition-all text-black ${
+              activeMenuTab === 'profile' ? 'font-bold' : ''
             }`}
           >
-            <div
-              className={`p-1.5 transition-all ${
-                activeMenuTab === 'profile'
-                  ? 'text-blue-600 font-bold'
-                  : 'text-black'
-              }`}
-            >
-              <CircleUser className="w-5 h-5 text-black" />
+            <div className="p-1.5 transition-all text-black">
+              <CircleUser className="w-5 h-5" />
             </div>
-            <span className="text-[11px] mt-0.5 tracking-tight text-black">Profile</span>
+            <span className="text-[11px] mt-0.5 tracking-tight">Profile</span>
           </button>
         </div>
       </footer>

@@ -42,6 +42,7 @@ import {
 } from 'lucide-react';
 import { VerificationData } from './SubscriptionFlow';
 import { UserAccount } from './AuthScreen';
+import { supabase } from '../lib/supabase';
 
 export type ActiveTab = 'tenant' | 'referrals' | 'gigs' | 'seekers' | 'profile' | null;
 
@@ -133,17 +134,36 @@ export default function NavigationPanels({
   const [hireCountdown, setHireCountdown] = useState<number>(4);
   const [hireAccepted, setHireAccepted] = useState<boolean>(false);
 
+  // Profit balances in South African Rands (ZAR / R) - Reset to R 0.00
+  const tenantProfitRands = 0.0;
+  const totalProfitRands = 0.0;
+
+  // Real submitted subscriptions from Supabase
+  const [submittedSubscriptions, setSubmittedSubscriptions] = useState<SubmittedSubscription[]>([]);
+
+  // Fetch subscriptions from Supabase
+  useEffect(() => {
+    const fetchSubs = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .order('submittedAt', { ascending: false });
+        
+        if (error) throw error;
+        if (data) setSubmittedSubscriptions(data as SubmittedSubscription[]);
+      } catch (err) {
+        console.error('Supabase fetch subs error:', err);
+      }
+    };
+    fetchSubs();
+  }, []);
+
   // Get latest referral selfie or user photo for profile logo
   const profileSelfieLogo = (() => {
-    try {
-      const stored = localStorage.getItem('timegig_submitted_subscriptions');
-      if (stored) {
-        const subs: SubmittedSubscription[] = JSON.parse(stored);
-        const latestWithSelfie = subs.find((s) => s.selfieImage);
-        if (latestWithSelfie?.selfieImage) return latestWithSelfie.selfieImage;
-      }
-      if (verificationData?.selfieImage) return verificationData.selfieImage;
-    } catch {}
+    const latestWithSelfie = submittedSubscriptions.find((s) => s.selfieImage);
+    if (latestWithSelfie?.selfieImage) return latestWithSelfie.selfieImage;
+    if (verificationData?.selfieImage) return verificationData.selfieImage;
     return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop';
   })();
 
@@ -160,11 +180,6 @@ export default function NavigationPanels({
     'Verified Tenant & Gig Coordinator on OpenStreetMap. Approved rental boundaries & navigation active.'
   );
   const [profileSavedToast, setProfileSavedToast] = useState<string | null>(null);
-
-  // Profit balances in South African Rands (ZAR / R) - Reset to R 0.00
-  const tenantProfitRands = 0.0;
-  const userProfitRands = 0.0;
-  const totalProfitRands = 0.0;
 
   // Tenant Invite Link
   const inviteLink = 'https://timegig.app/join/tenant?ref=timegig2026';
@@ -203,73 +218,84 @@ export default function NavigationPanels({
     }
   };
 
-  // Real submitted subscriptions
-  const [submittedSubscriptions, setSubmittedSubscriptions] = useState<SubmittedSubscription[]>(() => {
-    try {
-      const stored = localStorage.getItem('timegig_submitted_subscriptions');
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return [];
-  });
-
-  // When verificationData is submitted, sync to submitted subscriptions
+  // When verificationData is submitted, sync to Supabase
   useEffect(() => {
     if (!verificationData?.submittedAt) return;
 
-    setSubmittedSubscriptions((prev) => {
-      const exists = prev.some((sub) => sub.submittedAt === verificationData.submittedAt);
-      if (exists) return prev;
+    const syncSub = async () => {
+      try {
+        const exists = submittedSubscriptions.some((sub) => sub.submittedAt === verificationData.submittedAt);
+        if (exists) return;
 
-      const newSub: SubmittedSubscription = {
-        id: `sub-tg-${Date.now()}`,
-        subscriberName: currentUser?.name || 'Verified Applicant',
-        subscriberEmail: currentUser?.email || 'timegig2026@gmail.com',
-        plan: verificationData.subscription,
-        amountRands: verificationData.subscription === 'tenant' ? 3400.0 : 1450.0,
-        submittedAt: verificationData.submittedAt,
-        status: 'pending',
-        idDocumentName: verificationData.idDocumentName || 'rsa-national-id.pdf',
-        paymentDocumentName: verificationData.paymentDocumentName || 'eft-proof-of-payment.png',
-        selfieImage: verificationData.selfieImage || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop',
-      };
+        const newSub: SubmittedSubscription = {
+          id: `sub-tg-${Date.now()}`,
+          subscriberName: currentUser?.name || 'Verified Applicant',
+          subscriberEmail: currentUser?.email || 'timegig2026@gmail.com',
+          plan: verificationData.subscription,
+          amountRands: verificationData.subscription === 'tenant' ? 3400.0 : 1450.0,
+          submittedAt: verificationData.submittedAt,
+          status: 'pending',
+          idDocumentName: verificationData.idDocumentName || 'rsa-national-id.pdf',
+          paymentDocumentName: verificationData.paymentDocumentName || 'eft-proof-of-payment.png',
+          selfieImage: verificationData.selfieImage || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&h=300&fit=crop',
+        };
 
-      const updated = [newSub, ...prev];
-      localStorage.setItem('timegig_submitted_subscriptions', JSON.stringify(updated));
-      return updated;
-    });
-  }, [verificationData, currentUser]);
+        const { error } = await supabase.from('subscriptions').insert([newSub]);
+        if (error) throw error;
 
-  const handleApproveSubmission = (id: string) => {
-    setSubmittedSubscriptions((prev) => {
-      const updated = prev.map((sub) =>
-        sub.id === id ? { ...sub, status: 'approved' as const } : sub
+        setSubmittedSubscriptions((prev) => [newSub, ...prev]);
+      } catch (err) {
+        console.error('Supabase sync error:', err);
+      }
+    };
+    syncSub();
+  }, [verificationData, currentUser, submittedSubscriptions]);
+
+  const handleApproveSubmission = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('subscriptions')
+        .update({ status: 'approved' })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setSubmittedSubscriptions((prev) =>
+        prev.map((sub) => (sub.id === id ? { ...sub, status: 'approved' } : sub))
       );
-      localStorage.setItem('timegig_submitted_subscriptions', JSON.stringify(updated));
-      return updated;
-    });
 
-    if (selectedSubmissionToView?.id === id) {
-      setSelectedSubmissionToView((prev) => (prev ? { ...prev, status: 'approved' } : null));
+      if (selectedSubmissionToView?.id === id) {
+        setSelectedSubmissionToView((prev) => (prev ? { ...prev, status: 'approved' } : null));
+      }
+
+      setContactSuccessToast('Referral approved!');
+      setTimeout(() => {
+        setSelectedSubmissionToView(null);
+        onNavigateToTab('profile');
+      }, 1200);
+    } catch (err) {
+      console.error('Approval error:', err);
     }
-
-    setContactSuccessToast('Referral approved! Directing to profile feature to save profile...');
-    setTimeout(() => {
-      setSelectedSubmissionToView(null);
-      onNavigateToTab('profile');
-    }, 1200);
   };
 
-  const handleRejectSubmission = (id: string) => {
-    setSubmittedSubscriptions((prev) => {
-      const updated = prev.map((sub) =>
-        sub.id === id ? { ...sub, status: 'rejected' as const } : sub
-      );
-      localStorage.setItem('timegig_submitted_subscriptions', JSON.stringify(updated));
-      return updated;
-    });
+  const handleRejectSubmission = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('subscriptions')
+        .update({ status: 'rejected' })
+        .eq('id', id);
 
-    if (selectedSubmissionToView?.id === id) {
-      setSelectedSubmissionToView((prev) => (prev ? { ...prev, status: 'rejected' } : null));
+      if (error) throw error;
+
+      setSubmittedSubscriptions((prev) =>
+        prev.map((sub) => (sub.id === id ? { ...sub, status: 'rejected' } : sub))
+      );
+
+      if (selectedSubmissionToView?.id === id) {
+        setSelectedSubmissionToView((prev) => (prev ? { ...prev, status: 'rejected' } : null));
+      }
+    } catch (err) {
+      console.error('Rejection error:', err);
     }
   };
 
@@ -537,7 +563,7 @@ export default function NavigationPanels({
               <div className="flex items-center gap-4">
                 <div
                   onClick={() => openFullScreen('Profile Logo', 'logo', profileSelfieLogo, 'selfie.jpg', profileName)}
-                  className="relative w-18 h-18 rounded-full overflow-hidden shrink-0 border-2 border-blue-500 shadow-md bg-blue-100 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform"
+                  className="relative w-24 h-24 rounded-full overflow-hidden shrink-0 border-2 border-blue-500 shadow-md bg-blue-100 flex items-center justify-center cursor-pointer hover:scale-105 transition-transform"
                 >
                   <img src={profileSelfieLogo || undefined} className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
